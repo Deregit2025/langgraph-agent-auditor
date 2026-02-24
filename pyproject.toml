@@ -1,0 +1,33 @@
+[project]
+name = "langgraph-auditor"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Dereje Derib",email = "derejederib@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.11,<4.0"
+dependencies = [
+    "langgraph (>=1.0.9,<2.0.0)",
+    "langchain (>=1.2.10,<2.0.0)",
+    "langchain-openai (>=1.1.10,<2.0.0)",
+    "pydantic (>=2.12.5,<3.0.0)",
+    "python-dotenv (>=1.2.1,<2.0.0)",
+    "openai (>=2.23.0,<3.0.0)",
+    "tree-sitter (>=0.25.2,<0.26.0)",
+    "gitpython (>=3.1.46,<4.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "pytest (>=9.0.2,<10.0.0)",
+    "pytest-cov (>=7.0.0,<8.0.0)",
+    "black (>=26.1.0,<27.0.0)",
+    "ruff (>=0.15.2,<0.16.0)",
+    "mypy (>=1.19.1,<2.0.0)"
+]
