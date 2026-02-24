@@ -30,7 +30,7 @@ def chief_justice(state: AgentState, output_dir: str = "audit") -> str:
     exec_summary_lines.append(f"Overall Average Score: {avg_score:.2f}\n")
     exec_summary_lines.append("Judges provided the following highlights:")
     for op in state.judicial_opinions:
-        exec_summary_lines.append(f"- **{op.judge_name} ({op.criterion})**: {op.comments[0]}")
+        exec_summary_lines.append(f"- **{op.judge} ({op.criterion})**: {op.comments}")
 
     # Criterion Breakdown
     breakdown_lines: List[str] = ["\n## Criterion Breakdown"]
@@ -43,13 +43,13 @@ def chief_justice(state: AgentState, output_dir: str = "audit") -> str:
             breakdown_lines.append(f"### {op.criterion}")
             breakdown_lines.append(f"- Average Score: {avg_crit_score:.2f}")
             for j in relevant_ops:
-                breakdown_lines.append(f"  - {j.judge_name}: {j.score}, Comments: {', '.join(j.comments)}")
+                breakdown_lines.append(f"  - {j.judge}: {j.score}, Comments: {j.comments}")
 
     # Remediation Plan
     remediation_lines: List[str] = ["\n## Remediation Plan"]
     for op in state.judicial_opinions:
         if op.score < 5:
-            remediation_lines.append(f"- {op.criterion} issues identified by {op.judge_name}: {', '.join(op.comments)}")
+            remediation_lines.append(f"- {op.criterion} issues identified by {op.judge}: {op.comments}")
 
     # Combine all sections
     report_lines = exec_summary_lines + breakdown_lines + remediation_lines
