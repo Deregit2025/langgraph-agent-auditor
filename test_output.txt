@@ -1,0 +1,21 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-9.0.2, pluggy-1.6.0
+rootdir: C:\Users\derej\Desktop\Intesive\langgraph-auditor
+configfile: pyproject.toml
+plugins: anyio-4.12.1
+collected 12 items
+
+tests/test_docanalyst.py::test_extract_text PASSED                       [  8%]
+tests/test_docanalyst.py::test_check_keywords PASSED                     [ 16%]
+tests/test_verify_file_paths PASSED                                      [ 25%]
+tests/test_judges.py::test_prosecutor_evaluate PASSED                    [ 33%]
+tests/test_judges.py::test_defense_evaluate PASSED                       [ 41%]
+tests/test_judges.py::test_techlead_evaluate PASSED                      [ 50%]
+tests/test_judges.py::test_judges_agree_disagree PASSED                  [ 58%]
+tests/test_repoinvestigator.py::test_collect_git_commits PASSED          [ 66%]
+tests/test_repoinvestigator.py::test_collect_state_info PASSED           [ 75%]
+tests/test_repoinvestigator.py::test_collect_graph_info PASSED           [ 83%]
+tests/test_visioninspector.py::test_load_image PASSED                    [ 91%]
+tests/test_visioninspector.py::test_classify PASSED                      [100%]
+
+============================== 12 passed in 0.23s ==============================
