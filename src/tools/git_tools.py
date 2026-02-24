@@ -12,14 +12,14 @@ def clone_repo_sandbox(repo_url: str) -> str:
     Clone the repo into a temporary directory for safe inspection.
     Returns the path to the cloned repo.
     """
-    temp_dir = tempfile.TemporaryDirectory()
+    temp_dir = tempfile.mkdtemp()
     subprocess.run(
-        ["git", "clone", repo_url, temp_dir.name],
+        ["git", "clone", "--depth", "1", repo_url, temp_dir],
         check=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE
     )
-    return temp_dir.name
+    return temp_dir
 
 
 # ------------------------------
@@ -27,10 +27,13 @@ def clone_repo_sandbox(repo_url: str) -> str:
 # ------------------------------
 def git_log_commits(repo_url: str, max_commits: int = 100) -> List[Tuple[str, str]]:
     """
-    Clone the repo into a sandbox and return a list of commits.
-    Each commit is a tuple: (commit_hash, commit_message)
+    If repo_url is a URL, clone into a sandbox.
+    If repo_url is a local path (exists), use it directly.
+    Returns a list of commits. Each commit is a tuple: (commit_hash, commit_message)
     """
-    repo_path = clone_repo_sandbox(repo_url)
+    is_local = os.path.isdir(repo_url)
+    repo_path = repo_url if is_local else clone_repo_sandbox(repo_url)
+    
     # Run git log
     result = subprocess.run(
         ["git", "-C", repo_path, "log", "--oneline", f"-n{max_commits}", "--reverse"],
