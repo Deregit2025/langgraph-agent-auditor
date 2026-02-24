@@ -1,6 +1,10 @@
 from typing import Callable, List, Dict, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.state import AgentState, Evidence, JudicialOpinion
+import os
+import datetime
+from langchain_core.callbacks import FileCallbackHandler
+from langchain_core.tracers.log_stream import LogStreamCallbackHandler
 
 # ------------------------------
 # Node representation
@@ -42,12 +46,22 @@ class StateGraph:
         """Run the graph starting from start nodes using parallel execution for fan-out."""
         visited = set()
         pending = list(self.start_nodes)
+        
+        # Setup Tracing if requested
+        log_dir = "audit/langsmith_logs"
+        os.makedirs(log_dir, exist_ok=True)
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_file = os.path.join(log_dir, f"trace_{timestamp}.log")
+        handler = FileCallbackHandler(log_file)
+
+        print(f"[*] Graph execution tracing enabled: {log_file}")
 
         while pending:
             # Execute all nodes at the current level in parallel
             results = {}
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                future_to_node = {executor.submit(node.run, state): node for node in pending}
+                # For now, we simulate the 'trace' by logging start/end
+                future_to_node = {executor.submit(self._run_node, node, state, log_file): node for node in pending}
                 for future in as_completed(future_to_node):
                     node = future_to_node[future]
                     results[node.name] = future.result()
@@ -63,3 +77,17 @@ class StateGraph:
             pending = next_level
 
         return state
+
+    def _run_node(self, node: Node, state: AgentState, log_file: str):
+        """Internal helper to run node with logging."""
+        timestamp = datetime.datetime.now().isoformat()
+        with open(log_file, "a") as f:
+            f.write(f"[{timestamp}] Starting Node: {node.name}\n")
+        
+        result = node.run(state)
+        
+        timestamp = datetime.datetime.now().isoformat()
+        with open(log_file, "a") as f:
+            f.write(f"[{timestamp}] Completed Node: {node.name}\n")
+        
+        return result
