@@ -34,6 +34,7 @@ class AgentState(BaseModel):
     """Complete state of an agent during a LangGraph run."""
     evidence_collection: List[Evidence] = []
     judicial_opinions: List[JudicialOpinion] = []
+    metadata: dict = {}
     last_updated: datetime = Field(default_factory=datetime.utcnow)
 
     def add_evidence(self, evidence: Evidence):
