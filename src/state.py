@@ -20,8 +20,10 @@ class JudicialOpinion(BaseModel):
     """Represents a Judge's evaluation of collected evidence."""
     judge: str                   # Judge persona (Prosecutor, Defense, TechLead)
     criterion: str               # Which rubric criterion this opinion evaluates
+    verdict: str                 # "Pass" / "Fail" or "Structured" / "Loose"
     score: int                   # Score assigned (e.g., 1-5)
-    rationale: str               # Explanation for score
+    rationale: str               # Detailed explanation for score
+    comments: str                # Short summary or highlights
     evidence_ids: Optional[List[int]] = None  # Indexes of Evidence items this opinion references
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
