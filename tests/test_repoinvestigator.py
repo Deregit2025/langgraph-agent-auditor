@@ -15,12 +15,13 @@ def repo_investigator():
 
 def test_collect_git_commits(repo_investigator):
     """Test that collect_git_commits returns a list of commits."""
+    # Mocking git_log_commits to return a list of (hash, message) tuples
     sample_commits = [
-        {"hash": "a1b2c3", "message": "Initial commit", "timestamp": "2026-01-01T12:00:00"},
-        {"hash": "d4e5f6", "message": "Add README", "timestamp": "2026-01-02T12:00:00"},
+        ("a1b2c3", "Initial commit"),
+        ("d4e5f6", "Add README"),
     ]
 
-    with patch("src.tools.git_tools.git_log_commits", return_value=sample_commits):
+    with patch("src.nodes.detectives.git_tools.git_log_commits", return_value=sample_commits):
         commits = repo_investigator.collect_git_commits()
         assert isinstance(commits, list)
         assert len(commits) == 2
@@ -38,10 +39,10 @@ class Evidence(BaseModel):
 class JudicialOpinion(BaseModel):
     verdict: str
 """
-    with patch("src.tools.file_utils.read_file", return_value=sample_state_content):
+    with patch("src.nodes.detectives.file_utils.read_file", return_value=sample_state_content):
         state_info = repo_investigator.collect_state_info()
-        assert "Evidence" in state_info
-        assert "JudicialOpinion" in state_info
+        assert "Evidence" in state_info["classes"]
+        assert "JudicialOpinion" in state_info["classes"]
 
 def test_collect_graph_info(repo_investigator):
     """Test that collect_graph_info returns graph structure info."""
@@ -52,6 +53,6 @@ class StateGraph:
     def add_edge(self, from_node, to_node):
         pass
 """
-    with patch("src.tools.file_utils.read_file", return_value=sample_graph_content):
+    with patch("src.nodes.detectives.file_utils.read_file", return_value=sample_graph_content):
         graph_info = repo_investigator.collect_graph_info()
-        assert "StateGraph" in graph_info
+        assert "StateGraph" in graph_info["classes"]
