@@ -25,4 +25,13 @@ def get_openai_api_key():
     return get_env("OPENAI_API_KEY")
 
 def get_test_repo_url():
-    return get_env("TEST_REPO_URL")
+    return get_env("TEST_REPO_URL_PEER")
+
+def get_self_repo_url():
+    return get_env("TEST_REPO_URL_SELF")
+
+def get_llm_provider():
+    return get_env("LLM_PROVIDER")
+
+def get_llm_base_url():
+    return get_env("LLM_BASE_URL")
