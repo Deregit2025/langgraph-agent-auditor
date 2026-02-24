@@ -2,6 +2,7 @@ from src.state import AgentState, JudicialOpinion
 from typing import List
 import datetime
 import os
+import glob
 
 # ------------------------------
 # ChiefJusticeNode
@@ -55,11 +56,27 @@ def chief_justice(state: AgentState, output_dir: str = "audit") -> str:
     report_lines = exec_summary_lines + breakdown_lines + remediation_lines
     report_content = "\n".join(report_lines)
 
-    # Save report
+    # Save report with timestamp
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     report_path = os.path.join(output_dir, f"final_audit_report_{timestamp}.md")
     with open(report_path, "w", encoding="utf-8") as f:
         f.write(report_content)
 
+    # Save as latest_report.md
+    latest_path = os.path.join(output_dir, "latest_report.md")
+    with open(latest_path, "w", encoding="utf-8") as f:
+        f.write(report_content)
+
+    # Purge old reports: keep only the 5 most recent timestamped ones
+    report_files = glob.glob(os.path.join(output_dir, "final_audit_report_*.md"))
+    report_files.sort(key=os.path.getmtime, reverse=True)
+    
+    for old_file in report_files[5:]:
+        try:
+            os.remove(old_file)
+        except Exception as e:
+            print(f"[Justice] Warning: Could not delete old report {old_file}: {e}")
+
     print(f"[ChiefJustice] Report generated at: {report_path}")
-    return report_path
+    print(f"[ChiefJustice] Latest report updated at: {latest_path}")
+    return latest_path
