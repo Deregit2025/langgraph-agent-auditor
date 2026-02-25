@@ -217,12 +217,23 @@ class StateGraph:
 
                 # ── Fan-in: merge evidence and opinions from all partials ──
                 for partial in partial_states.values():
-                    state.evidence_collection = (
-                        state.evidence_collection + partial.evidence_collection
-                    )
-                    state.judicial_opinions = (
-                        state.judicial_opinions + partial.judicial_opinions
-                    )
+                    if isinstance(partial, dict):
+                        # Merge dictionaries (LangGraph style)
+                        if "evidence_collection" in partial:
+                            state.evidence_collection = state.evidence_collection + partial["evidence_collection"]
+                        if "judicial_opinions" in partial:
+                            state.judicial_opinions = state.judicial_opinions + partial["judicial_opinions"]
+                        # Apply any other metadata updates
+                        if "metadata" in partial:
+                            state.metadata.update(partial["metadata"])
+                    else:
+                        # Merge full state objects (legacy/fallback)
+                        state.evidence_collection = (
+                            state.evidence_collection + partial.evidence_collection
+                        )
+                        state.judicial_opinions = (
+                            state.judicial_opinions + partial.judicial_opinions
+                        )
 
             # ── Determine next level ────────────────────────────────────
             next_nodes_set: Dict[str, Node] = {}
@@ -259,8 +270,13 @@ class StateGraph:
         result = node.run(state)
 
         end_ts = datetime.datetime.now().isoformat()
-        ev_delta = len(result.evidence_collection) - len(state.evidence_collection)
-        op_delta = len(result.judicial_opinions) - len(state.judicial_opinions)
+        if isinstance(result, dict):
+            ev_delta = len(result.get("evidence_collection", []))
+            op_delta = len(result.get("judicial_opinions", []))
+        else:
+            ev_delta = len(result.evidence_collection) - len(state.evidence_collection)
+            op_delta = len(result.judicial_opinions) - len(state.judicial_opinions)
+            
         self._log(
             log_file, node.name, "COMPLETE",
             f"duration={end_ts} evidence_added={ev_delta} opinions_added={op_delta}",
