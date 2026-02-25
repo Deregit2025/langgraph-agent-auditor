@@ -1,7 +1,5 @@
-# tests/test_judges.py
-import pytest
-from unittest.mock import patch, MagicMock
 from src.nodes.judges import Prosecutor, Defense, TechLead
+from src.state import JudicialOpinion
 
 @pytest.fixture
 def prosecutor_node():
@@ -19,7 +17,7 @@ def test_prosecutor_evaluate(prosecutor_node):
     """Test Prosecutor evaluation logic"""
     evidence = "Found 5 commits. Pydantic usage detected."
     # Use a real dimension ID from rubric/rubric.json (e.g., 'state_schema')
-    dim_id = "state_schema"
+    dim_id = "forensic_accuracy_code"
     
     # Mock the internal LLM evaluation to avoid actual API calls during tests
     with patch.object(prosecutor_node, "_evaluate_with_llm") as mock_llm:
@@ -41,7 +39,7 @@ def test_prosecutor_evaluate(prosecutor_node):
 def test_defense_evaluate(defense_node):
     """Test Defense evaluation logic"""
     evidence = "Only 2 commits. Sparse documentation."
-    dim_id = "state_schema"
+    dim_id = "forensic_accuracy_code"
     
     # Test heuristic fallback (default behavior when no LLM is configured)
     defense_node.llm = None
@@ -54,7 +52,7 @@ def test_defense_evaluate(defense_node):
 def test_techlead_evaluate(techlead_node):
     """Test TechLead evaluation logic"""
     evidence = "Tool safety verified. Fan-out orchestration confirmed."
-    dim_id = "graph_orchestration"
+    dim_id = "langgraph_architecture"
     
     result = techlead_node.evaluate_dimension(dim_id, evidence)
     assert result.judge == "TechLead"
@@ -63,7 +61,7 @@ def test_techlead_evaluate(techlead_node):
 def test_judges_agree_disagree(prosecutor_node, defense_node):
     """Test that different judges can return different opinions on the same evidence."""
     evidence = "Test evidence string."
-    dim_id = "state_schema"
+    dim_id = "forensic_accuracy_code"
     
     # Mock different scores
     with patch.object(prosecutor_node, "_evaluate_with_heuristic") as mock_p:
