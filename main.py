@@ -16,28 +16,30 @@ def build_audit_graph():
     # 1. Detective Nodes (Fan-Out)
     # ------------------------------------------------------------------
 
-    def repo_node(state: AgentState) -> AgentState:
+    def repo_node(state: AgentState) -> dict:
         """RepoInvestigator node with deep AST analysis."""
         repo_url = state.metadata.get("repo_url", ".")
         investigator = RepoInvestigator(repo_url=repo_url)
+        new_evidence = []
         
         # 1. Basic Git History
         try:
             commits = investigator.collect_git_commits()
             sha = investigator.collect_current_sha()
-            state.add_evidence(Evidence(
+            new_evidence.append(Evidence(
                 source="RepoInvestigator", type="git_log",
                 goal="Check git history", found=True,
                 description=f"Found {len(commits)} commits.",
                 location=f"repo:{repo_url} HEAD:{sha}",
-                rationale="History confirms active development.",
+                rationale="History confirms active development and version control usage.",
                 confidence=1.0
             ))
-        except Exception:
-            state.add_evidence(Evidence(
+        except Exception as e:
+            new_evidence.append(Evidence(
                 source="RepoInvestigator", type="missing_artifact",
                 goal="Check git history", found=False,
-                description="Git history unavailable.",
+                description=f"Git history unavailable: {str(e)}",
+                rationale="Failed to access git logs, possibly due to network or repo permissions.",
                 confidence=0.0
             ))
 
@@ -45,31 +47,38 @@ def build_audit_graph():
         try:
             state_info = investigator.collect_state_info()
             pydantic_classes = state_info.get("classes", [])
-            has_pydantic = "pydantic" in str(state_info.get("imports", [])).lower()
-            state.add_evidence(Evidence(
+            found_classes = len(pydantic_classes) > 0
+            new_evidence.append(Evidence(
                 source="RepoInvestigator", type="ast_parse",
-                goal="Verify Pydantic usage", found=len(pydantic_classes) > 0,
+                goal="Verify Pydantic usage", found=found_classes,
                 description=f"Identified state classes: {pydantic_classes}",
                 location="src/state.py",
-                rationale="Architecture requires typed Pydantic models for AgentState.",
+                rationale="Architecture requires typed Pydantic models for AgentState to ensure runtime type safety.",
                 content=f"Imports: {state_info.get('imports')}",
-                confidence=1.0
+                confidence=1.0 if found_classes else 0.5
             ))
         except Exception as e:
-            print(f"[RepoDetective] AST Error: {e}")
+            new_evidence.append(Evidence(
+                source="RepoInvestigator", type="error",
+                goal="Verify Pydantic usage", found=False,
+                description=f"AST Error: {str(e)}",
+                rationale="AST parser failed to read state definitions.",
+                confidence=0.0
+            ))
 
         # 3. Deep AST: Graph Topology Verification (StateGraph)
         try:
             graph_info = investigator.collect_graph_info()
-            has_stategraph = "StateGraph" in graph_info.get("classes", [])
-            state.add_evidence(Evidence(
+            classes = graph_info.get("classes", [])
+            has_stategraph = "StateGraph" in classes
+            new_evidence.append(Evidence(
                 source="RepoInvestigator", type="ast_parse",
                 goal="Verify StateGraph orchestration", found=has_stategraph,
                 description="StateGraph class definition located.",
                 location="src/graph.py",
-                rationale="Orchestration must be handled by a structured StateGraph.",
-                content=f"Classes found: {graph_info.get('classes')}",
-                confidence=1.0
+                rationale="Orchestration must be handled by a structured StateGraph for complex agentic workflows.",
+                content=f"Classes found: {classes}",
+                confidence=1.0 if has_stategraph else 0.0
             ))
         except Exception:
             pass
@@ -77,14 +86,15 @@ def build_audit_graph():
         # 4. Forensic: Tool Safety & Sandboxing Verification
         try:
             safety_info = investigator.collect_tool_safety_info()
-            state.add_evidence(Evidence(
+            is_safe = safety_info.get("has_sandboxing") and safety_info.get("has_prompt_guard")
+            new_evidence.append(Evidence(
                 source="RepoInvestigator", type="security_scan",
                 goal="Verify sandboxed git operations", 
-                found=safety_info.get("has_sandboxing") and safety_info.get("has_prompt_guard"),
+                found=is_safe,
                 description=f"Sandboxing: {safety_info.get('has_sandboxing')}, Prompt Guard: {safety_info.get('has_prompt_guard')}",
                 location="src/tools/git_tools.py",
-                rationale="Security compliance requires GIT_TERMINAL_PROMPT=0 and temporary directories.",
-                content=f"Security Metrics: {safety_info.get('snippet', '')}",
+                rationale="Security compliance requires GIT_TERMINAL_PROMPT=0 and temporary directories to prevent environment contamination.",
+                content=f"Security Metrics: {safety_info.get('snippet', '')[:200]}...",
                 confidence=1.0
             ))
         except Exception:
@@ -93,38 +103,41 @@ def build_audit_graph():
         # 5. Forensic: Judicial Nuance & Prompt Verification
         try:
             nuance_info = investigator.collect_judicial_nuance_info()
-            state.add_evidence(Evidence(
+            is_nuanced = nuance_info.get("has_persona_logic") and nuance_info.get("json_intent")
+            new_evidence.append(Evidence(
                 source="RepoInvestigator", type="prompt_analysis",
                 goal="Verify persona distinctness & JSON intent", 
-                found=nuance_info.get("has_persona_logic") and nuance_info.get("json_intent"),
+                found=is_nuanced,
                 description=f"Persona Logic: {nuance_info.get('has_persona_logic')}, JSON Intent: {nuance_info.get('json_intent')}",
                 location="src/nodes/judges.py",
-                rationale="Audit integrity requires distinct judge personas and structured outputs.",
-                content=f"Prompt Logic: {nuance_info.get('logic_snippets', {})}",
+                rationale="Audit integrity requires distinct judge personas and structured JSON outputs for reliability.",
+                content=f"Prompt Logic: {str(nuance_info.get('logic_snippets', {}))[:200]}...",
                 confidence=1.0
             ))
         except Exception:
             pass
 
-        return state
+        return {"evidence_collection": new_evidence}
 
-    def doc_node(state: AgentState) -> AgentState:
+    def doc_node(state: AgentState) -> dict:
         """Analyze documentation for theoretical depth and artifact claims."""
         pdf_path = state.metadata.get("pdf_path", "report/AUDIT_SUBMISSION_REPORT.md")
         analyst = DocAnalyst(pdf_path)
+        new_evidence = []
         
         # 1. Theoretical Depth (Dialectical Synthesis, Metacognition)
         try:
             summary = analyst.check_keywords(["Dialectical Synthesis", "Metacognition"])
             for kw, data in summary.items():
-                state.add_evidence(Evidence(
+                is_found = data["hit_count"] > 0
+                new_evidence.append(Evidence(
                     source="DocAnalyst", type="theoretical_verification",
-                    goal=f"Verify mention of '{kw}'", found=data["hit_count"] > 0,
+                    goal=f"Verify mention of '{kw}'", found=is_found,
                     description=f"Found '{kw}' {data['hit_count']} times on pages {data['page_numbers']}.",
                     location=pdf_path,
-                    rationale="Architecture report must demonstrate theoretical alignment with MAS principles.",
+                    rationale=f"Architecture report must demonstrate theoretical alignment with MAS principles like {kw}.",
                     content=str(data["contexts"][:2]),
-                    confidence=1.0 if data["hit_count"] > 0 else 0.0
+                    confidence=1.0 if is_found else 0.0
                 ))
         except Exception:
             pass
@@ -132,34 +145,49 @@ def build_audit_graph():
         # 2. File Path Verification (Forensic Proof of Existence)
         try:
             found, missing = analyst.verify_file_paths()
-            state.add_evidence(Evidence(
+            has_files = len(found) > 0
+            new_evidence.append(Evidence(
                 source="DocAnalyst", type="file_verification",
-                goal="Verify artifact existence", found=len(found) > 0,
+                goal="Verify artifact existence", found=has_files,
                 description=f"Verified {len(found)} files; {len(missing)} missing.",
                 location=pdf_path,
-                rationale="Forensic audit must prove documented files exist in the repo.",
-                content=f"Verified paths: {found[:10]}",
+                rationale="Forensic audit must prove that documented files actually exist in the repository to prevent document-code drift.",
+                content=f"Verified paths: {found[:5]}",
                 confidence=1.0
             ))
         except Exception:
             pass
         
-        return state
+        return {"evidence_collection": new_evidence}
 
-    def vision_node(state: AgentState) -> AgentState:
+    def vision_node(state: AgentState) -> dict:
         """VisionInspector node."""
         img_path = state.metadata.get("image_path", "")
+        new_evidence = []
         if not img_path:
-            state.add_evidence(Evidence(source="VisionInspector", type="skipped", 
-                                        description="No image path provided.", confidence=0.0))
-            return state
+            new_evidence.append(Evidence(
+                source="VisionInspector", type="skipped", 
+                description="No image path provided.", 
+                found=False,
+                rationale="Visual audit skip requested or no diagram provided for verification.",
+                confidence=0.0
+            ))
+            return {"evidence_collection": new_evidence}
         
-        inspector = VisionInspector(img_path)
-        classification = inspector.classify()
-        state.add_evidence(Evidence(source="VisionInspector", type="vision_scan",
-                                   description=f"Classified as {classification.get('label')}",
-                                   confidence=0.8))
-        return state
+        try:
+            inspector = VisionInspector(img_path)
+            classification = inspector.classify()
+            new_evidence.append(Evidence(
+                source="VisionInspector", type="vision_scan",
+                description=f"Classified as {classification.get('label')}",
+                found=True,
+                rationale="Automated diagram classification to verify visual documentation claims.",
+                confidence=0.8
+            ))
+        except Exception:
+            pass
+            
+        return {"evidence_collection": new_evidence}
 
     # ------------------------------------------------------------------
     # 2. Aggregation & Conflict Resolution (Fan-In)
