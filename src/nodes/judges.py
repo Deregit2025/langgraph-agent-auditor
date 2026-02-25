@@ -108,15 +108,7 @@ class BaseJudge:
             rationale=rationale,
             comments=f"{note} Applied logic: {logic[:100]}..."
         )
-        
-        return JudicialOpinion(
-            judge=self.name,
-            criterion=dim["name"],
-            verdict=verdict,
-            score=score,
-            rationale=rationale,
-            comments=f"{note} Applied logic: {logic[:100]}..."
-        )
+
 
 class Prosecutor(BaseJudge):
     def __init__(self):
