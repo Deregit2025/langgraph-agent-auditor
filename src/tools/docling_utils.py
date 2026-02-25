@@ -110,27 +110,36 @@ class ForensicPDFReader:
 
     def load(self) -> "ForensicPDFReader":
         """
-        Read the PDF and split it into per-page ``PDFChunk`` objects.
-
-        Returns
-        -------
-        ForensicPDFReader
-            Self, so calls can be chained: ``reader.load().query(kw)``.
-
-        Raises
-        ------
-        FileNotFoundError
-            If *pdf_path* does not exist on disk.
-        RuntimeError
-            If ``pypdf`` is not installed or the file cannot be parsed.
+        Read the PDF or Markdown file and split it into per-page (PDF) 
+        or per-section (Markdown) ``PDFChunk`` objects.
         """
         path = Path(self.pdf_path)
         if not path.exists():
             raise FileNotFoundError(
-                f"[DocAnalyst] PDF not found at '{self.pdf_path}'. "
-                "Verify the path passed to ForensicPDFReader."
+                f"[DocAnalyst] File not found at '{self.pdf_path}'."
             )
 
+        self.chunks = []
+        
+        # Handle Markdown files
+        if path.suffix.lower() == ".md":
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    full_text = f.read()
+                # Split by H2 headers for "page-like" chunking
+                sections = re.split(r"\n## ", full_text)
+                for i, section in enumerate(sections, start=1):
+                    normalised = re.sub(r"[ \t]+", " ", section).strip()
+                    if normalised:
+                        self.chunks.append(
+                            PDFChunk(page_number=i, text=normalised, source_path=self.pdf_path)
+                        )
+                self._loaded = True
+                return self
+            except Exception as exc:
+                raise RuntimeError(f"[DocAnalyst] Failed to read Markdown '{self.pdf_path}': {exc}")
+
+        # Handle PDF files
         if not _PYPDF_AVAILABLE:
             raise RuntimeError(
                 "[DocAnalyst] 'pypdf' is not installed. "
@@ -144,21 +153,14 @@ class ForensicPDFReader:
                 f"[DocAnalyst] Failed to open '{self.pdf_path}' as a PDF: {exc}"
             ) from exc
 
-        self.chunks = []
         for page_index, page in enumerate(reader.pages, start=1):
             try:
                 raw_text = page.extract_text() or ""
             except Exception:
-                raw_text = ""  # gracefully skip unreadable pages
-
-            # Normalise whitespace
+                raw_text = ""
             normalised = re.sub(r"[ \t]+", " ", raw_text).strip()
             self.chunks.append(
-                PDFChunk(
-                    page_number=page_index,
-                    text=normalised,
-                    source_path=self.pdf_path,
-                )
+                PDFChunk(page_number=page_index, text=normalised, source_path=self.pdf_path)
             )
 
         self._loaded = True
