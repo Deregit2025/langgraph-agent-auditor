@@ -17,9 +17,11 @@ def build_audit_graph():
     # ------------------------------------------------------------------
 
     def repo_node(state: AgentState) -> AgentState:
-        """RepoInvestigator node."""
+        """RepoInvestigator node with deep AST analysis."""
         repo_url = state.metadata.get("repo_url", ".")
         investigator = RepoInvestigator(repo_url=repo_url)
+        
+        # 1. Basic Git History
         try:
             commits = investigator.collect_git_commits()
             sha = investigator.collect_current_sha()
@@ -38,30 +40,110 @@ def build_audit_graph():
                 description="Git history unavailable.",
                 confidence=0.0
             ))
+
+        # 2. Deep AST: State Schema Verification (Pydantic)
+        try:
+            state_info = investigator.collect_state_info()
+            pydantic_classes = state_info.get("classes", [])
+            has_pydantic = "pydantic" in str(state_info.get("imports", [])).lower()
+            state.add_evidence(Evidence(
+                source="RepoInvestigator", type="ast_parse",
+                goal="Verify Pydantic usage", found=len(pydantic_classes) > 0,
+                description=f"Identified state classes: {pydantic_classes}",
+                location="src/state.py",
+                rationale="Architecture requires typed Pydantic models for AgentState.",
+                content=f"Imports: {state_info.get('imports')}",
+                confidence=1.0
+            ))
+        except Exception as e:
+            print(f"[RepoDetective] AST Error: {e}")
+
+        # 3. Deep AST: Graph Topology Verification (StateGraph)
+        try:
+            graph_info = investigator.collect_graph_info()
+            has_stategraph = "StateGraph" in graph_info.get("classes", [])
+            state.add_evidence(Evidence(
+                source="RepoInvestigator", type="ast_parse",
+                goal="Verify StateGraph orchestration", found=has_stategraph,
+                description="StateGraph class definition located.",
+                location="src/graph.py",
+                rationale="Orchestration must be handled by a structured StateGraph.",
+                content=f"Classes found: {graph_info.get('classes')}",
+                confidence=1.0
+            ))
+        except Exception:
+            pass
+
+        # 4. Forensic: Tool Safety & Sandboxing Verification
+        try:
+            safety_info = investigator.collect_tool_safety_info()
+            state.add_evidence(Evidence(
+                source="RepoInvestigator", type="security_scan",
+                goal="Verify sandboxed git operations", 
+                found=safety_info.get("has_sandboxing") and safety_info.get("has_prompt_guard"),
+                description=f"Sandboxing: {safety_info.get('has_sandboxing')}, Prompt Guard: {safety_info.get('has_prompt_guard')}",
+                location="src/tools/git_tools.py",
+                rationale="Security compliance requires GIT_TERMINAL_PROMPT=0 and temporary directories.",
+                content=f"Security Metrics: {safety_info.get('snippet', '')}",
+                confidence=1.0
+            ))
+        except Exception:
+            pass
+
+        # 5. Forensic: Judicial Nuance & Prompt Verification
+        try:
+            nuance_info = investigator.collect_judicial_nuance_info()
+            state.add_evidence(Evidence(
+                source="RepoInvestigator", type="prompt_analysis",
+                goal="Verify persona distinctness & JSON intent", 
+                found=nuance_info.get("has_persona_logic") and nuance_info.get("json_intent"),
+                description=f"Persona Logic: {nuance_info.get('has_persona_logic')}, JSON Intent: {nuance_info.get('json_intent')}",
+                location="src/nodes/judges.py",
+                rationale="Audit integrity requires distinct judge personas and structured outputs.",
+                content=f"Prompt Logic: {nuance_info.get('logic_snippets', {})}",
+                confidence=1.0
+            ))
+        except Exception:
+            pass
+
         return state
 
     def doc_node(state: AgentState) -> AgentState:
-        """DocAnalyst node."""
+        """Analyze documentation for theoretical depth and artifact claims."""
         pdf_path = state.metadata.get("pdf_path", "report/AUDIT_SUBMISSION_REPORT.md")
-        if not os.path.exists(pdf_path):
-            state.add_evidence(Evidence(
-                source="DocAnalyst", type="missing_artifact",
-                goal="Locate PDF", found=False,
-                description=f"File {pdf_path} not found.",
-                confidence=0.0
-            ))
-            return state
+        analyst = DocAnalyst(pdf_path)
         
-        analyst = DocAnalyst(pdf_path=pdf_path)
-        keywords = analyst.check_keywords()
-        matches = [kw for kw, info in keywords.items() if info["hit_count"] > 0]
-        state.add_evidence(Evidence(
-            source="DocAnalyst", type="pdf_scan",
-            goal="Verify terminology", found=len(matches) > 0,
-            description=f"Found keywords: {matches}",
-            location=pdf_path,
-            confidence=0.9
-        ))
+        # 1. Theoretical Depth (Dialectical Synthesis, Metacognition)
+        try:
+            summary = analyst.check_keywords(["Dialectical Synthesis", "Metacognition"])
+            for kw, data in summary.items():
+                state.add_evidence(Evidence(
+                    source="DocAnalyst", type="theoretical_verification",
+                    goal=f"Verify mention of '{kw}'", found=data["hit_count"] > 0,
+                    description=f"Found '{kw}' {data['hit_count']} times on pages {data['page_numbers']}.",
+                    location=pdf_path,
+                    rationale="Architecture report must demonstrate theoretical alignment with MAS principles.",
+                    content=str(data["contexts"][:2]),
+                    confidence=1.0 if data["hit_count"] > 0 else 0.0
+                ))
+        except Exception:
+            pass
+
+        # 2. File Path Verification (Forensic Proof of Existence)
+        try:
+            found, missing = analyst.verify_file_paths()
+            state.add_evidence(Evidence(
+                source="DocAnalyst", type="file_verification",
+                goal="Verify artifact existence", found=len(found) > 0,
+                description=f"Verified {len(found)} files; {len(missing)} missing.",
+                location=pdf_path,
+                rationale="Forensic audit must prove documented files exist in the repo.",
+                content=f"Verified paths: {found[:10]}",
+                confidence=1.0
+            ))
+        except Exception:
+            pass
+        
         return state
 
     def vision_node(state: AgentState) -> AgentState:
@@ -99,15 +181,37 @@ def build_audit_graph():
     # ------------------------------------------------------------------
 
     def judge_node(state: AgentState):
-        """Judges: Prosecutor, Defense, and TechLead."""
+        """Judges: Prosecutor, Defense, and TechLead evaluation layer."""
+        print(f"[*] Judges: Evaluating {len(state.evidence_collection)} pieces of evidence...")
         proc, defen, lead = Prosecutor(), Defense(), TechLead()
-        evidence_str = "\n".join([f"- {e.source}: {e.description}" for e in state.evidence_collection])
+        
+        # Build a high-fidelity evidence context for the Judges
+        evidence_segments = []
+        for e in state.evidence_collection:
+            segment = [
+                f"### Source: {e.source} ({e.type})",
+                f"**Goal**: {e.goal or 'Not specified'}",
+                f"**Finding**: {e.description}",
+            ]
+            if e.location:
+                segment.append(f"**Location**: {e.location}")
+            if e.content:
+                # Cap content to prevent token bloat
+                clean_content = str(e.content)[:1000]
+                segment.append(f"**Forensic Snippet**:\n```\n{clean_content}\n```")
+            evidence_segments.append("\n".join(segment))
+            
+        evidence_str = "\n\n---\n\n".join(evidence_segments)
+        
         rubric = load_rubric()
-        for dim in rubric.get("dimensions", []):
+        for i, dim in enumerate(rubric.get("dimensions", []), 1):
             dim_id = dim["id"]
+            print(f"    -> Evaluating Dimension {i}/{len(rubric.get('dimensions', []))}: {dim_id}")
+            # Judges now receive the full breadcrumb trail
             state.add_opinion(proc.evaluate_dimension(dim_id, evidence_str))
             state.add_opinion(defen.evaluate_dimension(dim_id, evidence_str))
             state.add_opinion(lead.evaluate_dimension(dim_id, evidence_str))
+            
         return state
 
     # ------------------------------------------------------------------
@@ -190,6 +294,7 @@ def main():
         from utils.config_loader import get_self_repo_url
         self_url = get_self_repo_url()
         state.metadata["repo_url"] = self_url if self_url else "."
+        state.metadata["pdf_path"] = "report/Report.pdf"
         state.metadata["output_dir"] = "audit/report_on_self_generated"
 
     graph = build_audit_graph()
