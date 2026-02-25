@@ -3,24 +3,29 @@
 import time
 from typing import Optional, Dict, Any
 from src.state import JudicialOpinion
-from utils.config_loader import load_rubric, get_openai_api_key, get_env, get_llm_provider
+from utils.config_loader import load_rubric, get_openai_api_key, get_google_api_key, get_env, get_llm_provider
 
 class BaseJudge:
     """
     Base class for all judges: evaluates evidence based on the rubric.
-    Supports both OpenAI and Google Gemini keys.
+    Supports OpenAI, Google Gemini, and Ollama.
     """
 
     def __init__(self, name: str = "BaseJudge", persona: str = "general"):
         self.name = name
         self.persona = persona.lower()
         self.rubric = load_rubric()
-        self.api_key = get_openai_api_key()
-        self.model_name = get_env("MODEL_NAME")
         self.provider = get_llm_provider()
+        self.model_name = get_env("MODEL_NAME")
         self.llm = None
         
-        if (self.api_key and "your_openai_api_key_here" not in self.api_key) or self.provider == "ollama":
+        # Select key based on provider
+        if self.provider == "google":
+            self.api_key = get_google_api_key()
+        else:
+            self.api_key = get_openai_api_key()
+            
+        if (self.api_key and "your_key_here" not in str(self.api_key)) or self.provider == "ollama":
             try:
                 if self.provider == "ollama":
                     from langchain_ollama import ChatOllama
