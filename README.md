@@ -12,13 +12,13 @@ The system orchestrates three types of agents:
 ## 🛠 Installation
 
 ### Prerequisites
-- Python 3.11+
+- Python 3.11+ (Strictly required for latest LangGraph features)
 - [Poetry](https://python-poetry.org/docs/#installation) (recommended) or `pip`
 
 ### Setup
 1.  **Clone the repository**:
     ```bash
-    git clone <repository_url>
+    git clone https://github.com/Deregit2025/langgraph-agent-auditor.git
     cd langgraph-auditor
     ```
 
@@ -29,7 +29,7 @@ The system orchestrates three types of agents:
     ```
     Using pip:
     ```bash
-    pip install .
+    pip install -r requirements.txt
     ```
 
 3.  **Configure Environment Variables**:
@@ -37,19 +37,23 @@ The system orchestrates three types of agents:
     ```bash
     cp .env.example .env
     ```
-    Edit `.env` to include your `OPENAI_API_KEY` or configure **Ollama** for local execution.
+    Edit `.env` to include your `OPENAI_API_KEY` or `GOOGLE_API_KEY` based on your `LLM_PROVIDER`.
 
-## 🔍 Running the Audit
+## 🔍 Usage & Commands
 
-To run the audit graph against a target repository or local project:
+To run the audit graph, use the following typical command invocations:
 
+### 1. Self-Audit (Audit this project)
 ```bash
-# Run in "self" mode to audit the current project
 python main.py --mode self
+```
+This will analyze the local codebase and generate a report in `audit/report_on_self_generated/`.
 
-# Run in "peer" mode to audit a remote repository (configured in .env)
+### 2. Peer-Audit (Audit a remote repo)
+```bash
 python main.py --mode peer
 ```
+Ensure `TEST_REPO_URL_PEER` is set in your `.env` file.
 
 ### Advanced Usage
 You can specify custom paths via `--metadata`:
