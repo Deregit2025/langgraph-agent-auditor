@@ -21,6 +21,9 @@ def load_rubric(filename="rubric/rubric.json"):
         return json.load(f)
 
 # Convenience functions for commonly used env variables
+def get_google_api_key():
+    return get_env("GOOGLE_API_KEY")
+
 def get_openai_api_key():
     return get_env("OPENAI_API_KEY")
 
