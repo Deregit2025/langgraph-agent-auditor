@@ -18,6 +18,12 @@ class RepoInvestigator:
 
     def __init__(self, repo_url: str):
         self.repo_url = repo_url
+        self.rubric = None
+        try:
+            from utils.config_loader import load_rubric
+            self.rubric = load_rubric()
+        except ImportError:
+            pass
 
     def collect_git_commits(self) -> List[Dict[str, str]]:
         """
@@ -66,6 +72,39 @@ class RepoInvestigator:
         """
         code = file_utils.read_file(graph_file) or ""
         return ast_parser.parse_ast(code)
+
+    def collect_tool_safety_info(self, tool_file: str = "src/tools/git_tools.py") -> dict:
+        """
+        Forensically check for 'GIT_TERMINAL_PROMPT=0' and sandboxing in Git tools.
+        """
+        code = file_utils.read_file(tool_file) or ""
+        return {
+            "has_sandboxing": "clone_repo_sandbox" in code,
+            "has_prompt_guard": "GIT_TERMINAL_PROMPT" in code and "0" in code,
+            "has_tempfile": "tempfile.mkdtemp" in code,
+            "snippet": code[:500] if code else ""
+        }
+
+    def collect_judicial_nuance_info(self, judge_file: str = "src/nodes/judges.py") -> dict:
+        """
+        Verify that Prosecutor, Defense, and TechLead personas have distinct prompts 
+        and check if output instructions favor structured data.
+        """
+        code = file_utils.read_file(judge_file) or ""
+        
+        # Check for persona-specific logic in the rubric if available
+        persona_logic = {}
+        if self.rubric:
+            for dim in self.rubric.get("dimensions", []):
+                if dim["id"] == "judicial_nuance":
+                    persona_logic = dim.get("judicial_logic", {})
+        
+        return {
+            "prompt_construction": "ChatPromptTemplate.from_messages" in code,
+            "has_persona_logic": len(persona_logic) > 0,
+            "logic_snippets": persona_logic,
+            "json_intent": "verdict" in code and "score" in code and "rationale" in code
+        }
 
 
 class DocAnalyst:
@@ -155,13 +194,7 @@ class DocAnalyst:
 
     def verify_file_paths(self) -> Tuple[List[str], List[str]]:
         """
-        Scan the PDF text for file path patterns and verify they exist on disk.
-
-        Returns
-        -------
-        Tuple[List[str], List[str]]
-            ``(found_paths, missing_paths)`` where each is a list of path
-            strings extracted from the document.
+        Scan the PDF/MD text for file path patterns and verify they exist on disk.
         """
         import re
         import os
@@ -169,6 +202,7 @@ class DocAnalyst:
         # Match common path patterns like src/graph.py or audit/report.md
         path_pattern = re.compile(r'\b[\w./\\-]+\.(?:py|md|json|yaml|yml|txt|pdf)\b')
 
+        # Use the reader to get all text across chunks
         try:
             text = self.extract_text()
         except Exception:
@@ -179,12 +213,14 @@ class DocAnalyst:
         found: List[str] = []
         missing: List[str] = []
         for p in candidate_paths:
-            if os.path.exists(p):
-                found.append(p)
-            else:
-                missing.append(p)
+            # Clean trailing punctuation
+            clean_p = p.rstrip('.,;)]}')
+            if os.path.exists(clean_p) and os.path.isfile(clean_p):
+                found.append(clean_p)
+            elif "/" in clean_p or "\\" in clean_p: # only count strings that look like paths
+                missing.append(clean_p)
 
-        return found, missing
+        return list(set(found)), list(set(missing))
 
 
 class VisionInspector:
