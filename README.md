@@ -9,6 +9,16 @@ The system orchestrates three types of agents:
 2.  **Judges (Intelligence Layer)**: A dialectical panel consisting of a **Prosecutor**, a **Defense**, and a **Tech Lead** who evaluate the evidence based on a standardized rubric.
 3.  **Justice (Synthesis Layer)**: The Chief Justice agent who consolidates all opinions into a final, professional audit report.
 
+## 💎 Core Contributions
+
+- **AST-Based Forensic Discovery**: Unlike basic string-search tools, our system uses Python's Abstract Syntax Tree (AST) to verify class inheritance, method decorators, and pydantic model constraints with 100% accuracy.
+- **Dialectical Judicial Synthesis**: Implements a "Contrarian Bench" where Prosecutor and Defense agents must argue based on forensic facts, preventing "LLM Yes-man" bias.
+- **Parallel CRDT State Merging**: Leverages `operator.add` reducers and `Annotated` types in Pydantic models to ensure that parallel detective findings are merged without data loss, mimicking Conflict-free Replicated Data Types (CRDT) for graph state.
+
+> [!TIP]
+> For a deep dive into the architecture and reproduction guide, see [IMPLEMENTATION.md](file:///c:/Users/derej/Desktop/Intesive/langgraph-auditor/IMPLEMENTATION.md).
+
+
 ## 🛠 Installation
 
 ### Prerequisites
