@@ -3,44 +3,53 @@
 import time
 from typing import Optional, Dict, Any
 from src.state import JudicialOpinion
-from utils.config_loader import load_rubric, get_openai_api_key, get_google_api_key, get_env, get_llm_provider
+from utils.config_loader import load_rubric, get_google_api_key, get_openrouter_api_key, get_env, get_llm_provider, get_llm_base_url, get_llm_model_name
 
 class BaseJudge:
     """
     Base class for all judges: evaluates evidence based on the rubric.
-    Supports OpenAI, Google Gemini, and Ollama.
+    Supports Google Gemini, OpenRouter, and Ollama.
     """
 
     def __init__(self, name: str = "BaseJudge", persona: str = "general"):
         self.name = name
         self.persona = persona.lower()
         self.rubric = load_rubric()
-        self.provider = get_llm_provider()
-        self.model_name = get_env("MODEL_NAME")
+        self.provider = get_llm_provider().lower()
+        self.model_name = get_llm_model_name()
         self.llm = None
         
-        # Select key based on provider
-        if self.provider == "google":
-            self.api_key = get_google_api_key()
-        else:
-            self.api_key = get_openai_api_key()
-            
-        if (self.api_key and "your_key_here" not in str(self.api_key)) or self.provider == "ollama":
-            try:
-                if self.provider == "ollama":
-                    from langchain_ollama import ChatOllama
-                    model = self.model_name if self.model_name else "llama3"
-                    self.llm = ChatOllama(model=model)
-                elif self.api_key.startswith("sk-") or (self.model_name and "gpt" in self.model_name.lower()):
-                    from langchain_openai import ChatOpenAI
-                    model = self.model_name if self.model_name else "gpt-4o"
-                    self.llm = ChatOpenAI(api_key=self.api_key, model=model)
-                elif self.api_key.startswith("AIzaSy") or (self.model_name and "gemini" in self.model_name.lower()):
-                    from langchain_google_genai import ChatGoogleGenerativeAI
-                    model = self.model_name if self.model_name else "models/gemini-2.0-flash"
-                    self.llm = ChatGoogleGenerativeAI(api_key=self.api_key, model=model)
-            except ImportError:
-                pass
+        try:
+            if self.provider == "ollama":
+                from langchain_ollama import ChatOllama
+                model = self.model_name if self.model_name else "llama3"
+                base_url = get_llm_base_url()
+                self.llm = ChatOllama(model=model, base_url=base_url)
+                print(f"[*] {self.name}: Initialized Ollama ({model})")
+
+            elif self.provider == "google":
+                from langchain_google_genai import ChatGoogleGenerativeAI
+                api_key = get_google_api_key()
+                if api_key:
+                    model = self.model_name if self.model_name else "gemini-2.0-flash"
+                    self.llm = ChatGoogleGenerativeAI(api_key=api_key, model=model)
+                    print(f"[*] {self.name}: Initialized Google Gemini ({model})")
+
+            elif self.provider == "openrouter":
+                from langchain_openai import ChatOpenAI
+                api_key = get_openrouter_api_key()
+                if api_key:
+                    model = self.model_name if self.model_name else "google/gemini-2.0-flash-001"
+                    self.llm = ChatOpenAI(
+                        api_key=api_key, 
+                        model=model, 
+                        base_url="https://openrouter.ai/api/v1"
+                    )
+                    print(f"[*] {self.name}: Initialized OpenRouter ({model})")
+        except ImportError as e:
+            print(f"[!] {self.name}: Failed to import required library for {self.provider}: {e}")
+        except Exception as e:
+            print(f"[!] {self.name}: Error initializing {self.provider}: {e}")
 
     def _get_dimension(self, dimension_id: str) -> Optional[Dict[str, Any]]:
         for dim in self.rubric.get("dimensions", []):
@@ -54,13 +63,28 @@ class BaseJudge:
         if not dim:
             raise ValueError(f"Dimension {dimension_id} not found in rubric.")
 
-        logic = dim["judicial_logic"].get(self.persona, "Evaluate objectively.")
-        instruction = dim["forensic_instruction"]
+        # Support both rubric v2 (judicial_logic dict) and v3 (success_pattern / failure_pattern)
+        judicial_logic = dim.get("judicial_logic", {})
+        logic = judicial_logic.get(self.persona, None)
+
+        if not logic:
+            # Build persona-appropriate guidance from v3 rubric fields
+            success = dim.get("success_pattern", "Evaluate the evidence for quality and correctness.")
+            failure = dim.get("failure_pattern", "Flag any missing or incorrect artifacts.")
+            if self.persona == "prosecutor":
+                logic = f"Look critically for failures and gaps. Failure pattern to watch for: {failure}"
+            elif self.persona == "defense":
+                logic = f"Highlight effort, creativity, and what was done well. Success pattern: {success}"
+            else:  # tech_lead
+                logic = f"Evaluate architectural soundness and practicality. Success: {success}. Failure: {failure}"
+
+        instruction = dim.get("forensic_instruction", "Apply your forensic judgment to the evidence provided.")
         
         if self.llm:
             try:
-                # Add delay to stay within rate limits for Gemini API
-                time.sleep(2)
+                # Add delay to stay within rate limits for Gemini API only
+                if self.provider == "google":
+                    time.sleep(2)
                 return self._evaluate_with_llm(dim, logic, instruction, evidence)
             except Exception as e:
                 print(f"[DEBUG] LLM Evaluation failed for {self.name}: {e}")
@@ -71,23 +95,51 @@ class BaseJudge:
 
     def _evaluate_with_llm(self, dim: Dict, logic: str, instruction: str, evidence: str) -> JudicialOpinion:
         from langchain_core.messages import SystemMessage, HumanMessage
+        import json
+        import re
         
         # We avoid ChatPromptTemplate here to prevent KeyError from curly braces in evidence snippet
         messages = [
-            SystemMessage(content=f"You are the {self.name}. {logic}\nYou must follow this forensic instruction: {instruction}"),
-            HumanMessage(content=f"Evidence gathered for criterion '{dim['name']}':\n\n{evidence}\n\nProvide your verdict, a score (1-5), and a detailed rationale based on the rubric.")
+            SystemMessage(content=(
+                f"You are the {self.name}. {logic}\n"
+                f"You must follow this forensic instruction: {instruction}\n\n"
+                "Respond ONLY with a JSON object in this exact format (no markdown, no extra text):\n"
+                '{"verdict": "Pass|Fail|Partial", "score": <integer 1-5>, "rationale": "<detailed reasoning>"}'
+            )),
+            HumanMessage(content=(
+                f"Evidence gathered for criterion '{dim['name']}':\n\n{evidence}\n\n"
+                "Provide your verdict, a score (1-5), and a detailed rationale based on the rubric."
+            ))
         ]
         
         response = self.llm.invoke(messages)
         content = response.content
         
+        # Parse structured JSON from LLM response
+        parsed_verdict = "Audit Complete"
+        parsed_score = 4
+        parsed_rationale = content
+        
+        try:
+            # Try to extract JSON block even if the model adds preamble
+            json_match = re.search(r'\{[^{}]+\}', content, re.DOTALL)
+            if json_match:
+                data = json.loads(json_match.group())
+                parsed_verdict = str(data.get("verdict", "Audit Complete"))
+                raw_score = int(data.get("score", 4))
+                parsed_score = max(1, min(5, raw_score))  # clamp to [1, 5]
+                parsed_rationale = str(data.get("rationale", content))
+        except (json.JSONDecodeError, ValueError, TypeError):
+            # If parsing fails, use full content as rationale and keep defaults
+            print(f"[DEBUG] {self.name}: Could not parse JSON from LLM response. Using raw content.")
+        
         return JudicialOpinion(
             judge=self.name,
             criterion=dim["name"],
-            verdict="Audit Complete", 
-            score=4, # Fallback score if parser fails; LLM logic should ideally return JSON
-            rationale=content,
-            comments=content[:300] + "..." if len(content) > 300 else content
+            verdict=parsed_verdict,
+            score=parsed_score,
+            rationale=parsed_rationale,
+            comments=parsed_rationale[:300] + "..." if len(parsed_rationale) > 300 else parsed_rationale
         )
 
     def _evaluate_with_heuristic(self, dim: Dict, logic: str, instruction: str, evidence: str, llm_error: bool = False) -> JudicialOpinion:

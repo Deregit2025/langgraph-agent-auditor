@@ -1,68 +1,200 @@
-from src.state import AgentState, JudicialOpinion
-from typing import List
+from src.state import AgentState, JudicialOpinion, Evidence
+from typing import List, Dict
 import datetime
 import os
 import glob
 
-# ------------------------------
-# ChiefJusticeNode
-# ------------------------------
+
 def chief_justice(state: AgentState, output_dir: str = "audit") -> str:
     """
     Synthesize Judge opinions into a final verdict.
     Generates a Markdown report with:
       - Executive Summary
+      - Dissent Analysis (synthesis_rules: dissent_requirement)
       - Criterion Breakdown
       - Remediation Plan
+      - Evidence Appendix (synthesis_rules: fact_supremacy)
+      - Synthesis Rules Applied
     """
 
     if not state.judicial_opinions:
         raise ValueError("No judicial opinions found. Judges must run before synthesis.")
 
-    # Ensure output folder exists
     os.makedirs(output_dir, exist_ok=True)
 
-    # Executive Summary
-    exec_summary_lines: List[str] = []
-    exec_summary_lines.append(f"# LangGraph Audit Report")
-    exec_summary_lines.append(f"Generated: {datetime.datetime.now().isoformat()}\n")
-    exec_summary_lines.append("## Executive Summary")
-    avg_score = sum(op.score for op in state.judicial_opinions) / len(state.judicial_opinions)
-    exec_summary_lines.append(f"Overall Average Score: {avg_score:.2f}\n")
-    exec_summary_lines.append("Judges provided the following highlights:")
-    for op in state.judicial_opinions:
-        exec_summary_lines.append(f"- **{op.judge} ({op.criterion})**: {op.comments}")
+    opinions = state.judicial_opinions
+    evidence = state.evidence_collection
 
-    # Criterion Breakdown
-    breakdown_lines: List[str] = ["\n## Criterion Breakdown"]
-    criteria_seen = set()
-    for op in state.judicial_opinions:
-        if op.criterion not in criteria_seen:
-            criteria_seen.add(op.criterion)
-            relevant_ops = [j for j in state.judicial_opinions if j.criterion == op.criterion]
-            avg_crit_score = sum(j.score for j in relevant_ops) / len(relevant_ops)
-            breakdown_lines.append(f"### {op.criterion}")
-            breakdown_lines.append(f"- Average Score: {avg_crit_score:.2f}")
-            for j in relevant_ops:
-                breakdown_lines.append(f"  - {j.judge}: {j.score}, Comments: {j.comments}")
+    # -----------------------------------------------------------------------
+    # Synthesis Rule: security_override
+    # If any security_scan evidence has found=False, cap total score at 3
+    # -----------------------------------------------------------------------
+    security_override_triggered = False
+    security_override_reason = ""
+    for ev in evidence:
+        if ev.type == "security_scan" and ev.found is False:
+            security_override_triggered = True
+            security_override_reason = ev.description
+            break
 
-    # Remediation Plan
-    remediation_lines: List[str] = ["\n## Remediation Plan"]
-    for op in state.judicial_opinions:
+    # -----------------------------------------------------------------------
+    # Score calculation
+    # -----------------------------------------------------------------------
+    raw_avg = sum(op.score for op in opinions) / len(opinions) if opinions else 0.0
+    if security_override_triggered:
+        final_avg = min(raw_avg, 3.0)
+    else:
+        final_avg = raw_avg
+
+    # -----------------------------------------------------------------------
+    # 1. Executive Summary
+    # -----------------------------------------------------------------------
+    report_lines: List[str] = []
+    report_lines.append("# LangGraph Audit Report")
+    report_lines.append(f"Generated: {datetime.datetime.now().isoformat()}\n")
+    report_lines.append("## Executive Summary")
+    report_lines.append(f"**Overall Average Score: {final_avg:.2f} / 5.00**")
+    if security_override_triggered:
+        report_lines.append(
+            f"\n> ⚠️ **Security Override Applied**: Score capped at 3.0 due to security finding: *{security_override_reason}*"
+        )
+    report_lines.append("\nJudges provided the following highlights:")
+    for op in opinions:
+        report_lines.append(f"- **{op.judge} ({op.criterion})** [{op.verdict}, {op.score}/5]: {op.comments}")
+
+    # -----------------------------------------------------------------------
+    # 2. Dissent Analysis (synthesis_rules: dissent_requirement)
+    # Chief Justice must document where Prosecutor and Defense disagreed
+    # -----------------------------------------------------------------------
+    report_lines.append("\n## Dissent Analysis")
+    report_lines.append(
+        "_Per synthesis rules, the Chief Justice documents all Prosecutor–Defense disagreements (score diff ≥ 2)._\n"
+    )
+
+    criteria_set = list(dict.fromkeys(op.criterion for op in opinions))
+    dissent_found = False
+
+    for criterion in criteria_set:
+        relevant = {op.judge: op for op in opinions if op.criterion == criterion}
+        p_op = relevant.get("Prosecutor")
+        d_op = relevant.get("Defense")
+        if p_op and d_op:
+            diff = abs(p_op.score - d_op.score)
+            if diff >= 2:
+                dissent_found = True
+                report_lines.append(f"### ⚖️ Dissent: {criterion}")
+                report_lines.append(
+                    f"- **Prosecutor** scored **{p_op.score}/5** — {p_op.verdict}: {p_op.comments}"
+                )
+                report_lines.append(
+                    f"- **Defense** scored **{d_op.score}/5** — {d_op.verdict}: {d_op.comments}"
+                )
+                report_lines.append(
+                    f"- *Score divergence: {diff} points. Chief Justice notes this criterion as contested.*\n"
+                )
+
+    if not dissent_found:
+        report_lines.append("_No significant dissent (score diff ≥ 2) between Prosecutor and Defense on any criterion._\n")
+
+    # -----------------------------------------------------------------------
+    # 3. Criterion Breakdown
+    # -----------------------------------------------------------------------
+    report_lines.append("\n## Criterion Breakdown")
+
+    for criterion in criteria_set:
+        relevant_ops = [op for op in opinions if op.criterion == criterion]
+        avg_crit_score = sum(op.score for op in relevant_ops) / len(relevant_ops)
+        report_lines.append(f"\n### {criterion}")
+        report_lines.append(f"- **Average Score**: {avg_crit_score:.2f} / 5.00")
+        for op in relevant_ops:
+            report_lines.append(f"\n#### {op.judge} — {op.verdict} ({op.score}/5)")
+            report_lines.append(f"{op.rationale}")
+
+    # -----------------------------------------------------------------------
+    # 4. Remediation Plan
+    # -----------------------------------------------------------------------
+    report_lines.append("\n## Remediation Plan")
+    remediation_added = False
+    for op in opinions:
         if op.score < 5:
-            remediation_lines.append(f"- {op.criterion} issues identified by {op.judge}: {op.comments}")
+            report_lines.append(
+                f"- **[{op.judge} on {op.criterion}]**: {op.comments}"
+            )
+            remediation_added = True
+    if not remediation_added:
+        report_lines.append("_No remediations required. All criteria scored 5/5._")
 
-    # Combine all sections
-    report_lines = exec_summary_lines + breakdown_lines + remediation_lines
+    # -----------------------------------------------------------------------
+    # 5. Evidence Appendix (synthesis_rules: fact_supremacy)
+    # "Forensic evidence (facts) always overrules Judicial opinion"
+    # -----------------------------------------------------------------------
+    report_lines.append("\n## Evidence Appendix")
+    report_lines.append(
+        "_Per synthesis rules (fact_supremacy), raw detective findings are preserved here as the authoritative forensic record._\n"
+    )
+
+    if not evidence:
+        report_lines.append("_No evidence collected._")
+    else:
+        # Group by source
+        sources: Dict[str, List[Evidence]] = {}
+        for ev in evidence:
+            sources.setdefault(ev.source, []).append(ev)
+
+        for source_name, items in sources.items():
+            report_lines.append(f"### {source_name}")
+            for ev in items:
+                status = "✅" if ev.found else ("❌" if ev.found is False else "ℹ️")
+                report_lines.append(f"\n**{status} [{ev.type}]** — {ev.description}")
+                if ev.goal:
+                    report_lines.append(f"- *Goal*: {ev.goal}")
+                if ev.location:
+                    report_lines.append(f"- *Location*: `{ev.location}`")
+                if ev.rationale:
+                    report_lines.append(f"- *Rationale*: {ev.rationale}")
+                if ev.content:
+                    snippet = str(ev.content)[:400]
+                    report_lines.append(f"- *Snippet*:\n```\n{snippet}\n```")
+                report_lines.append(f"- *Confidence*: {ev.confidence:.0%}")
+
+    # -----------------------------------------------------------------------
+    # 6. Synthesis Rules Applied
+    # -----------------------------------------------------------------------
+    report_lines.append("\n## Synthesis Rules Applied")
+
+    rules_applied = []
+    if security_override_triggered:
+        rules_applied.append(
+            f"- ✅ **security_override**: Score capped at 3.0. Reason: {security_override_reason}"
+        )
+    else:
+        rules_applied.append("- ✔️ **security_override**: Not triggered (no confirmed security failures).")
+
+    rules_applied.append(
+        "- ✅ **fact_supremacy**: Evidence Appendix rendered above; detective findings take precedence over judicial interpretation."
+    )
+
+    if dissent_found:
+        rules_applied.append(
+            "- ✅ **dissent_requirement**: Prosecutor–Defense disagreements documented in Dissent Analysis section."
+        )
+    else:
+        rules_applied.append(
+            "- ✔️ **dissent_requirement**: No significant dissent detected; section included for transparency."
+        )
+
+    report_lines.extend(rules_applied)
+
+    # -----------------------------------------------------------------------
+    # Write report
+    # -----------------------------------------------------------------------
     report_content = "\n".join(report_lines)
 
-    # Save report with timestamp
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     report_path = os.path.join(output_dir, f"final_audit_report_{timestamp}.md")
     with open(report_path, "w", encoding="utf-8") as f:
         f.write(report_content)
 
-    # Save as latest_report.md
     latest_path = os.path.join(output_dir, "latest_report.md")
     with open(latest_path, "w", encoding="utf-8") as f:
         f.write(report_content)
@@ -70,7 +202,6 @@ def chief_justice(state: AgentState, output_dir: str = "audit") -> str:
     # Purge old reports: keep only the 5 most recent timestamped ones
     report_files = glob.glob(os.path.join(output_dir, "final_audit_report_*.md"))
     report_files.sort(key=os.path.getmtime, reverse=True)
-    
     for old_file in report_files[5:]:
         try:
             os.remove(old_file)

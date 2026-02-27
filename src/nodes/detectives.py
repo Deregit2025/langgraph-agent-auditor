@@ -42,7 +42,7 @@ class RepoInvestigator:
             raise
 
         return [
-            {"hash": c[0], "message": c[1], "timestamp": "2026-01-01T12:00:00"}
+            {"hash": c[0], "message": c[1], "timestamp": c[2] if len(c) > 2 else ""}
             for c in commits
         ]
 
@@ -100,7 +100,9 @@ class RepoInvestigator:
                     persona_logic = dim.get("judicial_logic", {})
         
         return {
-            "prompt_construction": "ChatPromptTemplate.from_messages" in code,
+            # Judges use SystemMessage/HumanMessage directly (not ChatPromptTemplate)
+            "prompt_construction": ("SystemMessage" in code and "HumanMessage" in code)
+                                   or "ChatPromptTemplate.from_messages" in code,
             "has_persona_logic": len(persona_logic) > 0,
             "logic_snippets": persona_logic,
             "json_intent": "verdict" in code and "score" in code and "rationale" in code
