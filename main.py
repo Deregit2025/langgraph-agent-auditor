@@ -7,6 +7,12 @@ from src.nodes.detectives import RepoInvestigator, DocAnalyst, VisionInspector
 from src.nodes.judges import Prosecutor, Defense, TechLead
 from src.nodes.justice import chief_justice
 from utils.config_loader import get_test_repo_url, load_rubric
+from utils.config_loader import get_env    
+# Enable LangSmith tracing
+os.environ["LANGCHAIN_TRACING_V2"] = "true"
+os.environ["LANGCHAIN_API_KEY"] = get_env("LANGCHAIN_API_KEY")
+os.environ["LANGCHAIN_PROJECT"] = get_env("LANGCHAIN_PROJECT", "langgraph-auditor")
+
 
 def build_audit_graph():
     """Build the LangGraph for auditing with parallel fan-out and conditional routing."""
@@ -121,7 +127,7 @@ def build_audit_graph():
 
     def doc_node(state: AgentState) -> dict:
         """Analyze documentation for theoretical depth and artifact claims."""
-        pdf_path = state.metadata.get("pdf_path", "report/AUDIT_SUBMISSION_REPORT.md")
+        pdf_path = state.metadata.get("pdf_path", "report/Report.pdf")
         analyst = DocAnalyst(pdf_path)
         new_evidence = []
         
