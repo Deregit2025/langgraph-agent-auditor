@@ -73,11 +73,19 @@ def chief_justice(state: AgentState, output_dir: str = "audit") -> str:
 
     criteria_set = list(dict.fromkeys(op.criterion for op in opinions))
     dissent_found = False
+    variance_triggered_criteria = []  # for variance_re_evaluation rule
 
     for criterion in criteria_set:
         relevant = {op.judge: op for op in opinions if op.criterion == criterion}
         p_op = relevant.get("Prosecutor")
         d_op = relevant.get("Defense")
+        tl_op = relevant.get("TechLead")
+        all_scores = [op.score for op in relevant.values()]
+
+        # variance_re_evaluation: score spread > 2 across any judges
+        if all_scores and (max(all_scores) - min(all_scores)) > 2:
+            variance_triggered_criteria.append(criterion)
+
         if p_op and d_op:
             diff = abs(p_op.score - d_op.score)
             if diff >= 2:
@@ -89,6 +97,11 @@ def chief_justice(state: AgentState, output_dir: str = "audit") -> str:
                 report_lines.append(
                     f"- **Defense** scored **{d_op.score}/5** — {d_op.verdict}: {d_op.comments}"
                 )
+                if criterion in variance_triggered_criteria:
+                    report_lines.append(
+                        f"  > ⚠️ **Variance Re-Evaluation Triggered**: score spread of {max(all_scores) - min(all_scores)} exceeds threshold of 2. "
+                        f"Evidence cited by each judge should be re-examined before accepting final score."
+                    )
                 report_lines.append(
                     f"- *Score divergence: {diff} points. Chief Justice notes this criterion as contested.*\n"
                 )
@@ -97,15 +110,37 @@ def chief_justice(state: AgentState, output_dir: str = "audit") -> str:
         report_lines.append("_No significant dissent (score diff ≥ 2) between Prosecutor and Defense on any criterion._\n")
 
     # -----------------------------------------------------------------------
-    # 3. Criterion Breakdown
+    # 3. Criterion Breakdown (with functionality_weight for graph_orchestration)
     # -----------------------------------------------------------------------
     report_lines.append("\n## Criterion Breakdown")
 
     for criterion in criteria_set:
         relevant_ops = [op for op in opinions if op.criterion == criterion]
-        avg_crit_score = sum(op.score for op in relevant_ops) / len(relevant_ops)
-        report_lines.append(f"\n### {criterion}")
+        # functionality_weight: TechLead carries highest weight for graph_orchestration
+        crit_id = next(
+            (op.judge for op in relevant_ops if op.criterion == criterion), ""
+        )
+        # Find the dimension id for this criterion name
+        from utils.config_loader import load_rubric
+        rubric = load_rubric()
+        dim_id = next(
+            (d["id"] for d in rubric.get("dimensions", []) if d["name"] == criterion), None
+        )
+        if dim_id == "graph_orchestration":
+            # TechLead vote carries double weight
+            weighted_scores = []
+            for op in relevant_ops:
+                weight = 2 if op.judge == "TechLead" else 1
+                weighted_scores.extend([op.score] * weight)
+            avg_crit_score = sum(weighted_scores) / len(weighted_scores) if weighted_scores else 0
+            weight_note = " *(TechLead weighted ×2 per functionality_weight rule)*"
+        else:
+            avg_crit_score = sum(op.score for op in relevant_ops) / len(relevant_ops)
+            weight_note = ""
+        report_lines.append(f"\n### {criterion}{weight_note}")
         report_lines.append(f"- **Average Score**: {avg_crit_score:.2f} / 5.00")
+        if criterion in variance_triggered_criteria:
+            report_lines.append(f"- ⚠️ **High Variance** — score spread exceeds 2 points, re-evaluation recommended")
         for op in relevant_ops:
             report_lines.append(f"\n#### {op.judge} — {op.verdict} ({op.score}/5)")
             report_lines.append(f"{op.rationale}")
@@ -181,6 +216,20 @@ def chief_justice(state: AgentState, output_dir: str = "audit") -> str:
     else:
         rules_applied.append(
             "- ✔️ **dissent_requirement**: No significant dissent detected; section included for transparency."
+        )
+
+    rules_applied.append(
+        "- ✅ **functionality_weight**: TechLead score weighted ×2 for the 'Graph Orchestration Architecture' criterion."
+    )
+
+    if variance_triggered_criteria:
+        rules_applied.append(
+            f"- ⚠️ **variance_re_evaluation**: Triggered for criterion(s): {', '.join(variance_triggered_criteria)}. "
+            "Score spread > 2 — these criteria have been flagged for forensic re-examination."
+        )
+    else:
+        rules_applied.append(
+            "- ✔️ **variance_re_evaluation**: Not triggered (no criterion had score spread > 2)."
         )
 
     report_lines.extend(rules_applied)
